@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<title>Iskolai diavetítés</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    cursor: none;
+  }
+  .slide {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+    background-color: #000;
+    background-position: center center;
+    background-repeat: no-repeat;
+    background-size: contain;      /* "cover"-re cserélve kitölti a képernyőt, de levághat a képből */
+    opacity: 0;
+    -webkit-transition: opacity 1s ease;
+    transition: opacity 1s ease;
+  }
+  .slide.show { opacity: 1; }
+  #msg {
+    position: absolute; left: 0; right: 0; top: 45%;
+    text-align: center;
+    color: #888;
+    font: 32px/1.4 Arial, Helvetica, sans-serif;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<div class="slide" id="layerA"></div>
+<div class="slide" id="layerB"></div>
+<div id="msg"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ===================== BEÁLLÍTÁSOK ===================== */
+  var CONFIG = {
+    folder: 'kepek/',     // a képek mappája (a perjel a végén maradjon)
+    ext: 'jpg',           // fájlkiterjesztés, kisbetűvel: jpg, jpeg vagy png
+    digits: 0,            // 0 = 1.jpg, 2.jpg ...   3 = 001.jpg, 002.jpg ...
+    seconds: 10,          // ennyi másodpercig látszik egy kép
+    retrySeconds: 30,     // ennyi idő után próbálkozik újra, ha nincs kép / nincs net
+    reloadMinutes: 60     // ilyen gyakran tölti újra az oldalt (memória + új képek miatt)
+  };
+  /* ======================================================== */
+
+  var layers = [document.getElementById('layerA'), document.getElementById('layerB')];
+  var msgEl = document.getElementById('msg');
+  var version = new Date().getTime();   // cache-ellen: minden újratöltésnél új
+  var active = 0;                       // melyik réteg látszik éppen
+  var current = 0;                      // a most mutatott kép sorszáma
+
+  function imageUrl(n) {
+    var s = String(n);
+    while (s.length < CONFIG.digits) { s = '0' + s; }
+    return CONFIG.folder + s + '.' + CONFIG.ext + '?v=' + version;
+  }
+
+  function loadImage(n, onOk, onFail) {
+    var img = new Image();
+    img.onload = function () { onOk(); };
+    img.onerror = function () { onFail(); };
+    img.src = imageUrl(n);
+  }
+
+  function showMessage(text) {
+    msgEl.innerHTML = text;
+    msgEl.style.display = 'block';
+  }
+
+  function hideMessage() {
+    msgEl.style.display = 'none';
+  }
+
+  // Megjeleníti az n. képet a láthatatlan rétegen, majd áttűnik rá.
+  function display(n) {
+    var next = 1 - active;
+    layers[next].style.backgroundImage = 'url("' + imageUrl(n) + '")';
+    layers[next].className = 'slide show';
+    layers[active].className = 'slide';
+    active = next;
+    current = n;
+    hideMessage();
+    preload(n + 1);                      // a következő kép előtöltése
+    setTimeout(advance, CONFIG.seconds * 1000);
+  }
+
+  function preload(n) {
+    var img = new Image();
+    img.src = imageUrl(n);               // ha nem létezik, nem baj
+  }
+
+  // Következő kép; ha nincs több, visszaugrik az 1-esre.
+  function advance() {
+    var n = current + 1;
+    loadImage(n, function () {
+      display(n);
+    }, function () {
+      startOver();
+    });
+  }
+
+  function startOver() {
+    loadImage(1, function () {
+      display(1);
+    }, function () {
+      showMessage('Nem található kép: ' + CONFIG.folder + '1.' + CONFIG.ext);
+      setTimeout(startOver, CONFIG.retrySeconds * 1000);
+    });
+  }
+
+  // Óránkénti újratöltés, de csak ha az oldal elérhető (ne kapjunk hibaoldalt).
+  function safeReload() {
+    var xhr = new XMLHttpRequest();
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) { return; }
+      if (xhr.status === 200) {
+        location.reload();
+      } else {
+        setTimeout(safeReload, 60 * 1000);
+      }
+    };
+    try {
+      xhr.open('GET', location.pathname + '?r=' + new Date().getTime(), true);
+      xhr.send();
+    } catch (e) {
+      setTimeout(safeReload, 60 * 1000);
+    }
+  }
+
+  setTimeout(safeReload, CONFIG.reloadMinutes * 60 * 1000);
+  startOver();
+})();
+</script>
+</body>
+</html>
